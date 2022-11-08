@@ -1,0 +1,17 @@
+{
+  "name": "@druidvav/armenia-blackouts-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@google-cloud/translate": "^7.0.3",
+    "@types/sanitize-html": "^2.6.2",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.0.3",
+    "dv-pg-query": "^1.2.0",
+    "moment": "^2.29.4",
+    "natsort": "^2.0.3",
+    "sanitize-html": "^2.7.3",
+    "telegraf": "^4.10.0"
+  }
+}
