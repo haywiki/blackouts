@@ -7,8 +7,9 @@ const PgQuery = require("dv-pg-query");
 class VjurParser {
     outages = [ ]
 
-    constructor(dbConfig, translate) {
+    constructor(dbConfig, log, translate) {
         this.db = new PgQuery(dbConfig);
+        this.log = log;
         this.translate = translate;
     }
 
@@ -50,7 +51,7 @@ class VjurParser {
         for (let outage of this.outages.reverse()) {
             let row = await this.db.fetchOne('select id from message_vjur where hash = $1', [ outage.hash ]);
             if (row && row.id) {
-                console.log('vjur > outages > ' + outage.hash + ' > already published');
+                this.log.info('outage ' + outage.hash + ' > already published');
                 continue;
             }
             const [titleRu] = await this.translate.translate(outage.title, 'ru');
@@ -60,7 +61,7 @@ class VjurParser {
                 hash: outage.hash, title: outage.title, body: outage.body, title_ru: titleRu, body_ru: bodyRu,
                 telegram_msg_id: response.message_id
             });
-            console.log('vjur > outages > ' + outage.hash + ' > published');
+            this.log.info('outage ' + outage.hash + ' > published');
         }
     }
 }

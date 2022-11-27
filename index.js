@@ -4,6 +4,8 @@ const PgQuery = require("dv-pg-query");
 const EnaParser = require('./src/ena');
 const VjurParser = require('./src/vjur');
 const {Translate} = require('@google-cloud/translate').v2;
+const log = require('log');
+require("log-node")();
 
 const translate = new Translate({ projectId: process.env.GOOGLE_TRANSLATE_PROJECT_ID });
 const db = new PgQuery({ dsn: process.env.PG_DSN, maxPoolSize: 2 });
@@ -27,13 +29,19 @@ async function reportToTelegram(messageHtml, messageId) {
     }
 }
 
-async function iterate() {
-    console.log('iterate');
-    const enaParser = new EnaParser(db);
-    const vjurParser = new VjurParser(db, translate);
+async function iterateEna() {
+    log.info('iterate ena');
+    const enaParser = new EnaParser(db, log.get('ena'));
     await enaParser.reportNewOutages(reportToTelegram);
-    await vjurParser.reportNewOutages(reportToTelegram);
-    setTimeout(() => iterate(), 15 * 60000);
+    setTimeout(() => iterateEna(), 20 * 60000);
 }
 
-iterate().then();
+async function iterateVjur() {
+    log.info('iterate vjur');
+    const vjurParser = new VjurParser(db, log.get('vjur'), translate);
+    await vjurParser.reportNewOutages(reportToTelegram);
+    setTimeout(() => iterateVjur(), 5 * 60000);
+}
+
+iterateEna().then();
+iterateVjur().then();

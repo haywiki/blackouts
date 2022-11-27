@@ -12,8 +12,9 @@ class EnaParser {
     today = moment().format('YYYY-MM-DD')
     outages = [ ]
 
-    constructor(dbConfig) {
+    constructor(dbConfig, log) {
         this.db = new PgQuery(dbConfig);
+        this.log = log;
     }
 
     async #loadOutages($) {
@@ -72,12 +73,12 @@ class EnaParser {
             const hash = getSHA256ofJSON(outageBody);
             let row = await this.db.fetchOne('select id from ena_message where hash = $1', [ hash ]);
             if (row && row.id) {
-                console.log('ena > planned > ' + hash + ' > already published');
+                this.log.info('planned > ' + hash + ' > already published');
                 continue;
             }
             const response = await reportFunc(outageBody);
             await this.db.insert('ena_message', { hash: hash, body: outageBody, telegram_msg_id: response.message_id });
-            console.log('ena > planned > ' + hash + ' > published');
+            this.log.info('planned > ' + hash + ' > published');
         }
     }
 
@@ -128,18 +129,18 @@ class EnaParser {
         try {
             let row = await this.db.fetchOne('select id, hash, telegram_msg_id from ena_message where message_group = $1 order by create_time desc limit 1', [ this.today ]);
             if (row && row.hash === hash) {
-                console.log('ena > emergency > already published');
+                this.log.info('emergency already published');
             } else if (row && row.telegram_msg_id) {
                 await reportFunc(report, row.telegram_msg_id);
                 await this.db.insert('ena_message', { hash: hash, body: report, message_group: this.today, telegram_msg_id: row.telegram_msg_id });
-                console.log('ena > emergency > updated');
+                this.log.info('emergency updated');
             } else {
                 const response = await reportFunc(report);
                 await this.db.insert('ena_message', { hash: hash, body: report, message_group: this.today, telegram_msg_id: response.message_id });
-                console.log('ena > emergency > published');
+                this.log.info('emergency published');
             }
         } catch (e) {
-            console.log(e);
+            this.log.error(e);
         }
 
     }
