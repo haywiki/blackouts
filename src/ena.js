@@ -57,19 +57,27 @@ class EnaParser {
 
     async reportNewOutages(reportFunc) {
         // noinspection JSUnresolvedFunction
-        const res = await fetch('https://www.ena.am/Info.aspx?id=5&lang=3');
-        if (!res.ok) {
-            return null;
+        try {
+            const res = await fetch('https://www.ena.am/Info.aspx?id=5&lang=3');
+            if (!res.ok) {
+                return null;
+            }
+            const $ = cheerio.load(await res.text());
+            await this.#loadOutages($);
+            await this.#loadEmergencies($);
+        } catch (e) {
+            this.log.error(e.message);
+            return;
         }
-        const $ = cheerio.load(await res.text());
-        await this.#loadOutages($);
-        await this.#loadEmergencies($);
         await this.#reportOutages(reportFunc);
         await this.#reportEmergencies(reportFunc);
     }
 
     async #reportOutages(reportFunc) {
         for (let outageBody of this.outages) {
+            if (!outageBody) {
+                continue;
+            }
             const hash = getSHA256ofJSON(outageBody);
             let row = await this.db.fetchOne('select id from ena_message where hash = $1', [ hash ]);
             if (row && row.id) {
@@ -83,35 +91,37 @@ class EnaParser {
     }
 
     async #reportEmergencies(reportFunc) {
-        const emergencies = await this.db.fetchAll('select * from ena_emergency where started_time >= \'2022-11-07\' and finished_time is null order by started_time, id');
-        if (!emergencies) {
+        const emergencies = await this.db.fetchAll('select * from ena_emergency where (started_telegram_msg_id is null or (finished_telegram_msg_id is null and finished_time is not null)) order by started_time, title');
+        if (!emergencies || !emergencies.length) {
+            this.log.info('no new emergencies');
             return;
         }
+        console.log(emergencies);
         let lines = [ ];
         for (let emergency of emergencies) {
-            let line = '';
-            if (emergency.finished_time) line += '<s>';
-            line += moment(emergency.started_time).format('HH:mm');
-            if (emergency.finished_time) line += '..' + moment(emergency.finished_time).format('HH:mm');
-            line += ' ' + emergency['title'];
-            if (emergency.finished_time) line += '</s>';
+            let line = { string: '', strike: !!emergency.finished_time };
+            line.string += moment(emergency.started_time).format('HH:mm');
+            if (emergency.finished_time) line.string += '..' + moment(emergency.finished_time).format('HH:mm');
+            line.string += ' ' + emergency['title'];
             lines.push(line);
         }
         let lines2 = { };
         for (let line of lines) {
             let match;
-            if (match = line.match(/^(\d{2}:\d{2} [а-я]\.[А-Я]+, .+ (ул\.|шоссе|кварт\.)) (.+)$/)) {
+            if (match = line.string.match(/^(\d{2}:\d{2}(..\d{2}:\d{2}|) [а-я]\.[А-Я]+, .+ (ул\.|шоссе|кварт\.|просп\.|проезд|массив)) (.+)$/)) {
                 if (!lines2[match[1]]) {
-                    lines2[match[1]] = { prefix: match[1], objects: [ ], strike: false }
+                    lines2[match[1]] = { prefix: match[1], objects: [ ], strike: !!match[2] }
+                }
+                lines2[match[1]]['objects'].push(match[4]);
+            } else if (match = line.string.match(/^(\d{2}:\d{2}(..\d{2}:\d{2}|) [^,]+), (.+)$/)) {
+                if (!lines2[match[1]]) {
+                    lines2[match[1]] = { prefix: match[1], objects: [ ], strike: !!match[2] }
                 }
                 lines2[match[1]]['objects'].push(match[3]);
-            } else if (match = line.match(/^(\d{2}:\d{2} [^,]+), (.+)$/)) {
-                if (!lines2[match[1]]) {
-                    lines2[match[1]] = { prefix: match[1], objects: [ ], strike: false }
-                }
-                lines2[match[1]]['objects'].push(match[2]);
             } else {
-                lines2[line] = { prefix: line, objects: [ ], strike: false };
+                if (!lines2[line.string]) {
+                    lines2[line.string] = { prefix: line.string, objects: [ ], strike: line.strike };
+                }
             }
         }
         let lines3 = [ ];
@@ -119,30 +129,27 @@ class EnaParser {
             line2.objects.sort(natsort());
             if (!line2.strike) {
                 lines3.push(line2.prefix + (line2.objects.length > 0 ? ': ' + line2.objects.join(', ') : ''));
+            } else {
+                lines3.push('<s>' + line2.prefix + (line2.objects.length > 0 ? ': ' + line2.objects.join(', ') : '') + '</s>');
             }
         }
-
         let report = "Аварийные отключения электричества <b>" + moment().format('DD.MM.YYYY') + "</b>\n\n" + lines3.join("\n");
         const hash = getSHA256ofJSON(report);
-        report += "\n\nОбновлено " + moment().format('HH:mm DD.MM.YYYY');
-
         try {
-            let row = await this.db.fetchOne('select id, hash, telegram_msg_id from ena_message where message_group = $1 order by create_time desc limit 1', [ this.today ]);
-            if (row && row.hash === hash) {
-                this.log.info('emergency already published');
-            } else if (row && row.telegram_msg_id) {
-                await reportFunc(report, row.telegram_msg_id);
-                await this.db.insert('ena_message', { hash: hash, body: report, message_group: this.today, telegram_msg_id: row.telegram_msg_id });
-                this.log.info('emergency updated');
-            } else {
-                const response = await reportFunc(report);
-                await this.db.insert('ena_message', { hash: hash, body: report, message_group: this.today, telegram_msg_id: response.message_id });
-                this.log.info('emergency published');
+            const response = await reportFunc(report);
+            await this.db.insert('ena_message', { hash: hash, body: report, message_group: this.today, telegram_msg_id: response.message_id });
+            for (let emergency of emergencies) {
+                if (!emergency['started_telegram_msg_id']) {
+                    await this.db.update('ena_emergency', { started_telegram_msg_id: response.message_id }, { id: emergency.id });
+                }
+                if (!emergency['finished_telegram_msg_id'] && emergency['finished_time']) {
+                    await this.db.update('ena_emergency', { finished_telegram_msg_id: response.message_id }, { id: emergency.id });
+                }
             }
+            this.log.info('emergencies published');
         } catch (e) {
             this.log.error(e);
         }
-
     }
 }
 

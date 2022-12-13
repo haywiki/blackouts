@@ -46,8 +46,12 @@ class VjurParser {
     }
 
     async reportNewOutages(reportFunc) {
-        await this.#loadOutages()
-
+        try {
+            await this.#loadOutages()
+        } catch (e) {
+            this.log.error(e.message);
+            return;
+        }
         for (let outage of this.outages.reverse()) {
             let row = await this.db.fetchOne('select id from message_vjur where hash = $1', [ outage.hash ]);
             if (row && row.id) {
