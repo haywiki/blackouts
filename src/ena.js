@@ -7,6 +7,7 @@ const getSHA256ofJSON = (input) => crypto.createHash('sha256').update(JSON.strin
 const moment = require('moment');
 const natsort = require('natsort').default;
 const PgQuery = require('dv-pg-query');
+const pluralize = require('pluralize-ru');
 
 class EnaParser {
     today = moment().format('YYYY-MM-DD')
@@ -44,7 +45,7 @@ class EnaParser {
 
     async #loadEmergencies($) {
         await this.db.execute('begin');
-        await this.db.execute('update ena_emergency set finished_time = now() where finished_time is null');
+        await this.db.execute('update ena_emergency set finished_time = now() + \'1 hour\'::interval where finished_time is null');
         for (let row of $('#ctl00_ContentPlaceHolder1_vtarayin tr')) {
             const time = $(row).find('td').eq(0).text();
             if (!time) continue;
@@ -91,12 +92,11 @@ class EnaParser {
     }
 
     async #reportEmergencies(reportFunc) {
-        const emergencies = await this.db.fetchAll('select * from ena_emergency where (started_telegram_msg_id is null or (finished_telegram_msg_id is null and finished_time is not null)) order by started_time, title');
+        const emergencies = await this.db.fetchAll('select * from ena_emergency where started_telegram_msg_id is null and started_time >= now() - \'1 day\'::interval and finished_time is null order by started_time, title');
         if (!emergencies || !emergencies.length) {
             this.log.info('no new emergencies');
             return;
         }
-        console.log(emergencies);
         let lines = [ ];
         for (let emergency of emergencies) {
             let line = { string: '', strike: !!emergency.finished_time };
@@ -108,12 +108,19 @@ class EnaParser {
         let lines2 = { };
         for (let line of lines) {
             let match;
-            if (match = line.string.match(/^(\d{2}:\d{2}(..\d{2}:\d{2}|) [а-я]\.[А-Я]+, .+ (ул\.|шоссе|кварт\.|просп\.|проезд|массив)) (.+)$/)) {
+            if (match = line.string.match(/^(\d{2}:\d{2}(..\d{2}:\d{2}|) [а-я]\.[А-я ().]+, .+ (ул\.|шоссе|кварт\.|просп\.|проезд|массив|туп\.|трасса|п|пог|шарк|КОМБИНАТ))( (.{1,6})|)$/)) {
                 if (!lines2[match[1]]) {
                     lines2[match[1]] = { prefix: match[1], objects: [ ], strike: !!match[2] }
                 }
-                lines2[match[1]]['objects'].push(match[4]);
-            } else if (match = line.string.match(/^(\d{2}:\d{2}(..\d{2}:\d{2}|) [^,]+), (.+)$/)) {
+                if (match[4]) {
+                    lines2[match[1]]['objects'].push(match[5]);
+                }
+            } else if (match = line.string.match(/^(\d{2}:\d{2}(..\d{2}:\d{2}|) [а-я]\.[А-я ().]+, .+) ([0-9թաղ./Ա,Բ]{1,5})$/)) {
+                if (!lines2[match[1]]) {
+                    lines2[match[1]] = { prefix: match[1], objects: [ ], strike: !!match[2] }
+                }
+                lines2[match[1]]['objects'].push(match[3]);
+            } else if (match = line.string.match(/^(\d{2}:\d{2}(..\d{2}:\d{2}|) [^,]+), (.{1,5})$/)) {
                 if (!lines2[match[1]]) {
                     lines2[match[1]] = { prefix: match[1], objects: [ ], strike: !!match[2] }
                 }
@@ -127,10 +134,16 @@ class EnaParser {
         let lines3 = [ ];
         for (let line2 of Object.values(lines2)) {
             line2.objects.sort(natsort());
+            let lineString = line2.prefix;
+            if (line2.objects.length > 5) {
+                lineString += ': <i>' + line2.objects.length + ' ' + pluralize(line2.objects.length, '', 'дом', 'дома', 'домов') + '</i>';
+            } else if (line2.objects.length > 0) {
+                lineString += ': ' + line2.objects.join(', ');
+            }
             if (!line2.strike) {
-                lines3.push(line2.prefix + (line2.objects.length > 0 ? ': ' + line2.objects.join(', ') : ''));
+                lines3.push(lineString);
             } else {
-                lines3.push('<s>' + line2.prefix + (line2.objects.length > 0 ? ': ' + line2.objects.join(', ') : '') + '</s>');
+                lines3.push('<s>' + lineString + '</s>');
             }
         }
         let report = "Аварийные отключения электричества <b>" + moment().format('DD.MM.YYYY') + "</b>\n\n" + lines3.join("\n");

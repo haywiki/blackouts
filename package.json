@@ -13,6 +13,7 @@
     "log-node": "^8.0.3",
     "moment": "^2.29.4",
     "natsort": "^2.0.3",
+    "pluralize-ru": "^1.0.1",
     "sanitize-html": "^2.7.3",
     "telegraf": "^4.10.0"
   }
