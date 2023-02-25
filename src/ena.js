@@ -85,9 +85,14 @@ class EnaParser {
                 this.log.info('planned > ' + hash + ' > already published');
                 continue;
             }
-            const response = await reportFunc(outageBody);
-            await this.db.insert('ena_message', { hash: hash, body: outageBody, telegram_msg_id: response.message_id });
-            this.log.info('planned > ' + hash + ' > published');
+            try {
+                const response = await reportFunc(outageBody);
+                await this.db.insert('ena_message', { hash: hash, body: outageBody, telegram_msg_id: response.message_id });
+                this.log.info('planned > ' + hash + ' > published');
+            } catch (e) {
+                this.log.error(e);
+                return;
+            }
         }
     }
 

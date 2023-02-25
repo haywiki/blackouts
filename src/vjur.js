@@ -13,12 +13,6 @@ class VjurParser {
         this.translate = translate;
     }
 
-    async #loadOutages() {
-        await this.#handleUrl('https://interactive.vjur.am');
-        await this.#handleUrl('https://interactive.vjur.am/?ajax=list-post&page=2');
-        await this.#handleUrl('https://interactive.vjur.am/?ajax=list-post&page=3');
-    }
-
     async #handleUrl(url) {
         const res = await fetch(url);
         if (!res.ok) {
@@ -47,25 +41,26 @@ class VjurParser {
 
     async reportNewOutages(reportFunc) {
         try {
-            await this.#loadOutages()
+            await this.#handleUrl('https://interactive.vjur.am');
+            await this.#handleUrl('https://interactive.vjur.am/?ajax=list-post&page=2');
+            await this.#handleUrl('https://interactive.vjur.am/?ajax=list-post&page=3');
+            for (let outage of this.outages.reverse()) {
+                let row = await this.db.fetchOne('select id from message_vjur where hash = $1', [ outage.hash ]);
+                if (row && row.id) {
+                    this.log.info('outage ' + outage.hash + ' > already published');
+                    continue;
+                }
+                const [titleRu] = await this.translate.translate(outage.title, 'ru');
+                const [bodyRu] = await this.translate.translate(outage.body, 'ru');
+                const response = await reportFunc('<b>' + titleRu + '</b>\n\n' + bodyRu);
+                await this.db.insert('message_vjur', {
+                    hash: outage.hash, title: outage.title, body: outage.body, title_ru: titleRu, body_ru: bodyRu,
+                    telegram_msg_id: response.message_id
+                });
+                this.log.info('outage ' + outage.hash + ' > published');
+            }
         } catch (e) {
             this.log.error(e.message);
-            return;
-        }
-        for (let outage of this.outages.reverse()) {
-            let row = await this.db.fetchOne('select id from message_vjur where hash = $1', [ outage.hash ]);
-            if (row && row.id) {
-                this.log.info('outage ' + outage.hash + ' > already published');
-                continue;
-            }
-            const [titleRu] = await this.translate.translate(outage.title, 'ru');
-            const [bodyRu] = await this.translate.translate(outage.body, 'ru');
-            const response = await reportFunc('<b>' + titleRu + '</b>\n\n' + bodyRu);
-            await this.db.insert('message_vjur', {
-                hash: outage.hash, title: outage.title, body: outage.body, title_ru: titleRu, body_ru: bodyRu,
-                telegram_msg_id: response.message_id
-            });
-            this.log.info('outage ' + outage.hash + ' > published');
         }
     }
 }
