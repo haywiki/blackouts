@@ -30,16 +30,18 @@ async function reportToTelegram(messageHtml, messageId) {
 }
 
 async function iterateEna() {
-    log.info('iterate ena');
+    log.get('ena').info('started');
     const enaParser = new EnaParser(db, log.get('ena'));
     await enaParser.reportNewOutages(reportToTelegram);
+    log.get('ena').info('finished');
     setTimeout(() => iterateEna(), 20 * 60000);
 }
 
 async function iterateVjur() {
-    log.info('iterate vjur');
+    log.get('vjur').info('started');
     const vjurParser = new VjurParser(db, log.get('vjur'), translate);
     await vjurParser.reportNewOutages(reportToTelegram);
+    log.get('vjur').info('finished');
     setTimeout(() => iterateVjur(), 5 * 60000);
 }
 
