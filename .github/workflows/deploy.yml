@@ -33,14 +33,14 @@ jobs:
           SUPER_SECRET: ${{ secrets.DOTENV }}
         run: |
           echo "$SUPER_SECRET" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/.env
-#      - name: Stopping services
-#        run: |
-#          sudo service dv-blackouts-bot stop
+      - name: Stopping services
+        run: |
+          sudo service dv-blackouts-bot stop
       - name: Switch symlink
         run: |
           rm -Rf ${CURRENT_DIR}
           ln -s "$RELEASES_DIR/$GITHUB_RUN_NUMBER" ${CURRENT_DIR}
-#      - name: Starting services
-#        run: |
-#          sudo systemctl daemon-reload
-#          sudo service dv-blackouts-bot start
+      - name: Starting services
+        run: |
+          sudo systemctl daemon-reload
+          sudo service dv-blackouts-bot start
