@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const PgQuery = require("dv-pg-query");

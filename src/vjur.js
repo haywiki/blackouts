@@ -23,17 +23,21 @@ class VjurParser {
         for (let row of $('#list-post .panel')) {
             let title = $(row).find('.panel-heading').text().trim();
             let body  = sanitizeHtml($(row).find('.panel-body').html(), {
-                allowedTags: [ 'b', 'i', 'em', 'u', 'strong', 'a' ],
-                allowedAttributes: {
-                    'a': [ 'href' ]
-                },
+                allowedTags: [ 'i', 'em', 'u', 'a' ],
+                allowedAttributes: { 'a': [ 'href' ] },
                 allowedIframeHostnames: [ ]
             });
-            body = body.replace(/^[ \t]+/gm, '').trim();
+            body = body.replace(/^[ \t]+/gm, '').replace(/[ \u00A0]+/gm, ' ').trim();
+            let truncatedBody = body
+                .replace('Ընկերությունը հայցում է սպառողների ներողամտությունը պատճառված անհանգստության և կանխավ շնորհակալություն հայտնում ըմբռնման համար:', '')
+                .replace('«Վեոլիա Ջուր» ընկերությունը տեղեկացնում է իր հաճախորդներին և սպառողներին, որ վթարային աշխատանքներով պայմանավորված ս.թ.', '')
+                .replace(/\d{2}\.\d{2}\.\d{4}թ?$/, '')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
             this.outages.push({
                 hash: getSHA256ofJSON(body),
                 title: title,
-                body: body,
+                body: truncatedBody,
             });
         }
         return outages;
@@ -43,7 +47,6 @@ class VjurParser {
         try {
             await this.#handleUrl('https://interactive.vjur.am');
             await this.#handleUrl('https://interactive.vjur.am/?ajax=list-post&page=2');
-            await this.#handleUrl('https://interactive.vjur.am/?ajax=list-post&page=3');
             for (let outage of this.outages.reverse()) {
                 let row = await this.db.fetchOne('select id from message_vjur where hash = $1', [ outage.hash ]);
                 if (row && row.id) {
