@@ -2,7 +2,7 @@ name: Deploy bot
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "main"]
   workflow_dispatch:
 
 permissions:
@@ -30,9 +30,9 @@ jobs:
           rsync -atl --exclude=.git/ --exclude=.gitignore --exclude=.github/ "./" "$RELEASES_DIR/$GITHUB_RUN_NUMBER"
       - name: Writing env file
         env:
-          SUPER_SECRET: ${{ secrets.SuperSecret }}
+          SUPER_SECRET: ${{ secrets.DOTENV }}
         run: |
-          echo "$SUPER_SECRET" > $RELEASES_DIR/$GITHUB_RUN_NUMBER/.env
+          echo "$SUPER_SECRET" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/.env
 #      - name: Stopping services
 #        run: |
 #          sudo service dv-blackouts-bot stop
