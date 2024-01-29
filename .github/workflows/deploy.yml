@@ -28,11 +28,13 @@ jobs:
         run: |
           mkdir "$RELEASES_DIR/$GITHUB_RUN_NUMBER"
           rsync -atl --exclude=.git/ --exclude=.gitignore --exclude=.github/ "./" "$RELEASES_DIR/$GITHUB_RUN_NUMBER"
-      - name: Writing env file
+      - name: Writing env files
         env:
-          SUPER_SECRET: ${{ secrets.DOTENV }}
+          DOTENV: ${{ secrets.DOTENV }}
+          GOOGLE_JSON: ${{ secrets.GOOGLE_JSON }}
         run: |
-          echo "$SUPER_SECRET" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/.env
+          echo "DOTENV" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/.env
+          echo "GOOGLE_JSON" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/gdeposylka-delta-4bed8c8ba497.json
       - name: Stopping services
         run: |
           sudo service dv-blackouts-bot stop
