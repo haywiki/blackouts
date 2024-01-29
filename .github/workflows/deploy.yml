@@ -33,8 +33,8 @@ jobs:
           DOTENV: ${{ secrets.DOTENV }}
           GOOGLE_JSON: ${{ secrets.GOOGLE_JSON }}
         run: |
-          echo "DOTENV" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/.env
-          echo "GOOGLE_JSON" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/gdeposylka-delta-4bed8c8ba497.json
+          echo "$DOTENV" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/.env
+          echo "$GOOGLE_JSON" | base64 -d > $RELEASES_DIR/$GITHUB_RUN_NUMBER/gdeposylka-delta-4bed8c8ba497.json
       - name: Stopping services
         run: |
           sudo service dv-blackouts-bot stop
